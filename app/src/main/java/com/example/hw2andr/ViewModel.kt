@@ -1,10 +1,18 @@
 package com.example.hw2andr
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.gson.JsonParser
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
@@ -47,27 +55,25 @@ class PaginationViewModel : ViewModel() {
 
     fun loadMoreItems() {
         if (_isLoading.value) return
-
         _isLoading.value = true
+        viewModelScope.launch {
+            val deferredResults = mutableListOf<Deferred<Unit>>()
 
-
-        Thread {
-            kotlinx.coroutines.runBlocking {
-                var index = imageNum
-                for(i in imageNum..imageNum+21) {
-                    val url = fetchJsonField(index)
-                    if (url.isEmpty()) break
-                    if (url == "Error"){
+            for (i in imageNum..imageNum + 21) {
+                deferredResults.add(async(Dispatchers.IO) {
+                    val url = fetchJsonField(i)
+                    if (url.isEmpty()) return@async
+                    if (url == "Error") {
                         _isError.value = true
-                        break
+                        return@async
                     }
                     _isError.value = false
                     _items.update { it + url }
-                    index++
-                }
-                imageNum+=22
-                _isLoading.value = false
+                })
             }
-        }.start()
+            deferredResults.awaitAll()
+            imageNum += 22
+            _isLoading.value = false
+        }
     }
 }
